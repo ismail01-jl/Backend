@@ -32,6 +32,12 @@ def predict_categorie(lot: RecyclingLot):
     categorie = le.inverse_transform([pred_enc])[0]
     return {"categorie_predite": categorie}
 
+@app.post("/predict/prix")
+def predict_prix(lot: RecyclingLot):
+    features = preprocess(lot)
+    prix = regressor.predict(features)[0]
+    return {"prix_revente_predit": round(float(prix), 2)}
+
 def preprocess(lot: RecyclingLot):
     # 1. Encode Source
     source_enc = enc_source.transform([[lot.Source]])[0][0]
