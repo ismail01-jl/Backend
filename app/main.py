@@ -144,3 +144,26 @@ def predict_full(lot: RecyclingLot):
         "categorie_predite":   categorie,
         "prix_revente_predit": round(float(prix), 2)
     }
+
+@app.post("/lot")
+def create_lot(lot: RecyclingLot):
+    global lot_counter
+    features  = preprocess(lot)
+    pred_enc  = classifier.predict(features)[0]
+    categorie = le.inverse_transform([pred_enc])[0]
+    prix      = regressor.predict(features)[0]
+
+    lot_id = lot_counter
+    lots_db[lot_id] = {
+        **lot.dict(),
+        "categorie_predite":   categorie,
+        "prix_revente_predit": round(float(prix), 2),
+        "timestamp":           datetime.now().isoformat()
+    }
+    lot_counter += 1
+    return {
+        "message":             "Lot created successfully",
+        "lot_id":              lot_id,
+        "categorie_predite":   categorie,
+        "prix_revente_predit": round(float(prix), 2)
+    }
