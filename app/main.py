@@ -4,8 +4,18 @@ from datetime import datetime
 import joblib
 import numpy as np
 import pandas as pd
+from fastapi.middleware.cors import CORSMiddleware
+
 
 app = FastAPI(title="EcoSmartX API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ── Load models ──
 classifier = joblib.load("models/best_classifier.pkl")
