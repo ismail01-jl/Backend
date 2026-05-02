@@ -4,45 +4,23 @@ from datetime import datetime
 import joblib
 import numpy as np
 import pandas as pd
-from fastapi.middleware.cors import CORSMiddleware
+from schemas.recycling import RecyclingLot
+from middleware.cors import setup_cors
+#from api.routes import prediction, stats, lots, info
+from services.prediction_service import enc_source , le ,scaler, classifier , regressor
 
 
 app = FastAPI(title="EcoSmartX API")
+setup_cors(app)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ── Load models ──
-classifier = joblib.load("models/best_classifier.pkl")
-regressor  = joblib.load("models/best_regressor.pkl")
-scaler     = joblib.load("models/scaler.pkl")
-enc_source = joblib.load("models/encoder_source.pkl")
-le         = joblib.load("models/label_encoder.pkl")
-
-# ── Load data ──
-df_train = pd.read_csv("train.csv")
-df_test  = pd.read_csv("test.csv")
-df_full  = pd.concat([df_train, df_test], ignore_index=True)
-
-# ── In-memory storage ──
 lots_db     = {}
 lot_counter = 1
 
-#Input schema
-class RecyclingLot(BaseModel):
-    Poids:        float
-    Volume:       float
-    Conductivite: float
-    Opacite:      float
-    Rigidite:     float
-    Source:       str
+# ── Load data ──
+df_train = pd.read_csv("./data/train.csv")
+df_test  = pd.read_csv("./data/test.csv")
+df_full  = pd.concat([df_train, df_test], ignore_index=True)
 
-# ── Preprocessing ──
 def preprocess(lot: RecyclingLot):
     source_enc = enc_source.transform([[lot.Source]])[0][0]
     nums = scaler.transform([[lot.Poids, lot.Volume,
@@ -51,7 +29,6 @@ def preprocess(lot: RecyclingLot):
     return np.append(nums[0], source_enc).reshape(1, -1)
 
 # GET endpoints:
-
 @app.get("/")
 def root():
     return {"message": "EcoSmartX API is running"}
