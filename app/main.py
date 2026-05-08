@@ -100,6 +100,44 @@ def get_all_lots():
         raise HTTPException(status_code=404, detail="No lots found")
     return {"total": len(lots_db), "lots": lots_db}
 
+@app.get("/stats/categories/count")
+def categories_count():
+
+    counts = df_full["Categorie"].value_counts()
+
+    return {
+        "labels": counts.index.tolist(),
+        "values": counts.values.tolist()
+    }
+
+@app.get("/stats/categories/prixmoyen")
+def avg_price_by_category():
+
+    stats = (
+        df_full
+        .groupby("Categorie")["Prix_Revente"]
+        .mean()
+        .round(2)
+    )
+
+    return {
+        "labels": stats.index.tolist(),
+        "values": stats.values.tolist()
+    }
+
+@app.get("/stats/sources/count")
+def sources_count():
+
+    counts = df_full["Source"].value_counts()
+
+    return {
+        "labels": counts.index.tolist(),
+        "values": counts.values.tolist()
+    }
+
+
+
+
 @app.get("/lot/{lot_id}")
 def get_lot(lot_id: int):
     if lot_id not in lots_db:
