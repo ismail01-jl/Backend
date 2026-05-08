@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 from schemas.recycling import RecyclingLot
 from middleware.cors import setup_cors
-#from api.routes import prediction, stats, lots, info
 from services.prediction_service import enc_source , le ,scaler, classifier , regressor
 
 
