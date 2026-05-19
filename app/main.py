@@ -10,6 +10,7 @@ import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem.snowball import FrenchStemmer
+from app.schemas.multimodal import MultimodalInput
 
 from schemas.recycling import RecyclingLot
 from schemas.nlp import TextInput
@@ -241,7 +242,29 @@ def predict_full(lot: RecyclingLot):
         "categorie_predite":   categorie,
         "prix_revente_predit": round(float(prix), 2)
     }
-    
+# ── Module 3 : Clustering prediction ──
+@app.post("/predict/cluster")
+def predict_cluster(lot: RecyclingLot):
+    source_enc = enc_source.transform([[lot.Source]])[0][0]
+
+    # Use same features as clustering training
+    features = np.array([[
+        lot.Poids,
+        lot.Volume,
+        lot.Conductivite,
+        lot.Opacite,
+        source_enc
+    ]])
+
+    cluster_id  = int(kmeans.predict(features)[0])
+    pca_coords  = pca.transform(features)[0]
+
+    return {
+        "cluster_id":    cluster_id,
+        "cluster_name":  CLUSTER_NAMES[cluster_id],
+        "pca_coords":    {"PC1": round(float(pca_coords[0]), 4),
+                          "PC2": round(float(pca_coords[1]), 4)},
+    }
     
 @app.post("/predict/nlp")
 def predict_nlp(input: TextInput):
@@ -259,6 +282,37 @@ def predict_nlp(input: TextInput):
         "texte_nettoye":  cleaned,
         "categorie_predite": categorie
     }
+    
+@app.post("/predict/multimodal")
+def predict_multimodal(input: MultimodalInput):
+    if not input.texte.strip():
+        raise HTTPException(status_code=400, detail="Le texte ne peut pas être vide")
+
+    # Preprocess text
+    cleaned = preprocess_text(input.texte)
+
+    # Build dataframe with same structure as training
+    source_enc = enc_source.transform([[input.Source]])[0][0]
+    df_input = pd.DataFrame([{
+        "Poids":        input.Poids,
+        "Volume":       input.Volume,
+        "Conductivite": input.Conductivite,
+        "Opacite":      input.Opacite,
+        "Rigidite":     input.Rigidite,
+        "Source_enc":   source_enc,
+        "text_clean":   cleaned
+    }])
+
+    pred_enc  = multimodal.predict(df_input)[0]
+    categorie = le.inverse_transform([pred_enc])[0]
+
+    return {
+        "texte_original":    input.texte,
+        "categorie_predite": categorie,
+        "mode":              "multimodal (texte + numérique)"
+    }
+
+
 """
 @app.post("/lot")
 def create_lot(lot: RecyclingLot):
