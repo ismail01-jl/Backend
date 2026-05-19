@@ -4,10 +4,21 @@ from datetime import datetime
 import joblib
 import numpy as np
 import pandas as pd
-from schemas.recycling import RecyclingLot
-from middleware.cors import setup_cors
-from services.prediction_service import enc_source , le ,scaler, classifier , regressor
+import re
+import string
+import nltk
+from nltk.tokenize import word_tokenize
+from nltk.corpus import stopwords
+from nltk.stem.snowball import FrenchStemmer
 
+from schemas.recycling import RecyclingLot
+from schemas.nlp import TextInput
+from middleware.cors import setup_cors
+from services.prediction_service import enc_source , le ,scaler, classifier , regressor, kmeans, pca, tfidf, nlp_clf, multimodal
+
+nltk.download('punkt',     quiet=True)
+nltk.download('stopwords', quiet=True)
+nltk.download('punkt_tab', quiet=True)
 
 app = FastAPI(title="EcoSmartX API")
 setup_cors(app)
@@ -19,6 +30,24 @@ lot_counter = 1
 df_train = pd.read_csv("./data/train.csv")
 df_test  = pd.read_csv("./data/test.csv")
 df_full  = pd.concat([df_train, df_test], ignore_index=True)
+df_pca = pd.read_csv("./data/pca_clusters.csv")
+
+STOP_DOMAINE = {
+    'lot', 'kg', 'litre', 'volume', 'poids', 'collecté', 'collectée',
+    'provenance', 'type', 'déchet', 'déchets', 'matériau', 'matériaux',
+    'usine', 'centre', 'tri', 'site', 'renseigné', 'non', 'identifié',
+    'rapport', 'collecte',
+}
+fr_stopwords = set(stopwords.words('french')).union(STOP_DOMAINE)
+stemmer      = FrenchStemmer()
+
+def preprocess_text(text: str) -> str:
+    text = text.lower()
+    text = re.sub(r'\d+[\.,]?\d*', '', text)
+    text = text.translate(str.maketrans('', '', string.punctuation + '«»—–'))
+    tokens = word_tokenize(text, language='french')
+    tokens = [stemmer.stem(t) for t in tokens if t not in fr_stopwords and len(t) > 2]
+    return ' '.join(tokens)
 
 def preprocess(lot: RecyclingLot):
     source_enc = enc_source.transform([[lot.Source]])[0][0]
@@ -26,6 +55,15 @@ def preprocess(lot: RecyclingLot):
                               lot.Conductivite, lot.Opacite,
                               lot.Rigidite]])
     return np.append(nums[0], source_enc).reshape(1, -1)
+
+FEATURES     = ["Poids", "Volume", "Conductivite", "Opacite", "Rigidite", "Source_enc"]
+LABEL_NAMES  = ['Métal', 'Papier', 'Plastique', 'Verre']
+CLUSTER_NAMES = {
+    0: "Groupe Métal",
+    1: "Groupe Mixte",
+    2: "Groupe Verre",
+    3: "Groupe Minoritaire"
+}
 
 # GET endpoints:
 @app.get("/")
@@ -53,8 +91,28 @@ def get_model_info():
             "type": type(regressor).__name__,
             "r2":   0.6926
         },
-        "features": list(df_train.columns)
+        "nlp": {
+            "type":       type(nlp_clf).__name__,
+            "vectorizer": "TF-IDF (500 features)",
+            "accuracy":   1.0
+        },
+        "multimodal": {
+            "type":     "hstack + LinearSVC",
+            "accuracy": 1.0
+        },
+        "clustering": {
+            "type":              "K-Means",
+            "k":                 4,
+            "silhouette_score":  0.5049,
+            "ari":               0.5468
+        },
+        "features": FEATURES
     }
+
+@app.get("/model/feature-importance")
+def get_feature_importance():
+    importances = classifier.feature_importances_.tolist()
+    return {"feature_importance": dict(zip(FEATURES, importances))}
 
 @app.get("/stats")
 def get_stats():
@@ -86,12 +144,6 @@ def get_stats_by_category(categorie: str):
         "poids_moyen": round(subset["Poids"].mean(), 2),
         "sources":     subset["Source"].value_counts().to_dict()
     }
-
-@app.get("/model/feature-importance")
-def get_feature_importance():
-    features    = ["Poids", "Volume", "Conductivite", "Opacite", "Rigidite", "Source_enc"]
-    importances = classifier.feature_importances_.tolist()
-    return {"feature_importance": dict(zip(features, importances))}
 
 @app.get("/lots")
 def get_all_lots():
@@ -133,9 +185,30 @@ def sources_count():
         "labels": counts.index.tolist(),
         "values": counts.values.tolist()
     }
+    
+# ── Module 3 : Clustering GET ──
+@app.get("/clustering/stats")
+def get_clustering_stats():
+    counts = df_pca["Cluster"].value_counts().sort_index()
+    return {
+        "k":                4,
+        "silhouette_score": 0.5049,
+        "ari":              0.5468,
+        "nmi":              0.6402,
+        "variance_pca":     52.8,
+        "cluster_counts": {
+            CLUSTER_NAMES[i]: int(counts[i])
+            for i in range(4)
+        }
+    }
 
-
-
+@app.get("/clustering/pca-data")
+def get_pca_data():
+    # Return sample of 500 points for frontend visualization
+    sample = df_pca.sample(n=min(500, len(df_pca)), random_state=42)
+    return {
+        "points": sample[["PC1", "PC2", "Cluster", "Categorie"]].to_dict(orient="records")
+    }
 
 @app.get("/lot/{lot_id}")
 def get_lot(lot_id: int):
@@ -168,7 +241,10 @@ def predict_full(lot: RecyclingLot):
         "categorie_predite":   categorie,
         "prix_revente_predit": round(float(prix), 2)
     }
+    
+    
 
+"""
 @app.post("/lot")
 def create_lot(lot: RecyclingLot):
     global lot_counter
@@ -190,4 +266,4 @@ def create_lot(lot: RecyclingLot):
         "lot_id":              lot_id,
         "categorie_predite":   categorie,
         "prix_revente_predit": round(float(prix), 2)
-    }
+    }"""
