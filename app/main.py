@@ -243,7 +243,22 @@ def predict_full(lot: RecyclingLot):
     }
     
     
+@app.post("/predict/nlp")
+def predict_nlp(input: TextInput):
+    if not input.texte.strip():
+        raise HTTPException(status_code=400, detail="Le texte ne peut pas être vide")
 
+    # Preprocess text same way as training
+    cleaned   = preprocess_text(input.texte)
+    vectorized = tfidf.transform([cleaned])
+    pred_enc  = nlp_clf.predict(vectorized)[0]
+    categorie = le.inverse_transform([pred_enc])[0]
+
+    return {
+        "texte_original": input.texte,
+        "texte_nettoye":  cleaned,
+        "categorie_predite": categorie
+    }
 """
 @app.post("/lot")
 def create_lot(lot: RecyclingLot):
