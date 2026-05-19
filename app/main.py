@@ -10,10 +10,11 @@ import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem.snowball import FrenchStemmer
-from app.schemas.multimodal import MultimodalInput
+
 
 from schemas.recycling import RecyclingLot
 from schemas.nlp import TextInput
+from schemas.multimodal import MultimodalInput
 from middleware.cors import setup_cors
 from services.prediction_service import enc_source , le ,scaler, classifier , regressor, kmeans, pca, tfidf, nlp_clf, multimodal
 
@@ -51,7 +52,7 @@ def preprocess_text(text: str) -> str:
     return ' '.join(tokens)
 
 def preprocess(lot: RecyclingLot):
-    source_enc = enc_source.transform([[lot.Source]])[0][0]
+    source_enc = enc_source.transform(pd.DataFrame([[lot.Source]], columns=["Source"]))[0][0]
     nums = scaler.transform([[lot.Poids, lot.Volume,
                               lot.Conductivite, lot.Opacite,
                               lot.Rigidite]])
@@ -311,28 +312,3 @@ def predict_multimodal(input: MultimodalInput):
         "categorie_predite": categorie,
         "mode":              "multimodal (texte + numérique)"
     }
-
-
-"""
-@app.post("/lot")
-def create_lot(lot: RecyclingLot):
-    global lot_counter
-    features  = preprocess(lot)
-    pred_enc  = classifier.predict(features)[0]
-    categorie = le.inverse_transform([pred_enc])[0]
-    prix      = regressor.predict(features)[0]
-
-    lot_id = lot_counter
-    lots_db[lot_id] = {
-        **lot.dict(),
-        "categorie_predite":   categorie,
-        "prix_revente_predit": round(float(prix), 2),
-        "timestamp":           datetime.now().isoformat()
-    }
-    lot_counter += 1
-    return {
-        "message":             "Lot created successfully",
-        "lot_id":              lot_id,
-        "categorie_predite":   categorie,
-        "prix_revente_predit": round(float(prix), 2)
-    }"""
