@@ -10,17 +10,19 @@ import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem.snowball import FrenchStemmer
-
+from nltk.stem import WordNetLemmatizer
+from scipy.sparse import hstack
 
 from schemas.recycling import RecyclingLot
 from schemas.nlp import TextInput
 from schemas.multimodal import MultimodalInput
 from middleware.cors import setup_cors
-from services.prediction_service import enc_source , le ,scaler, classifier , regressor, kmeans, pca, tfidf, nlp_clf, multimodal
+from services.prediction_service import enc_source , le ,scaler, classifier , regressor, kmeans, pca, tfidf, nlp_clf, multimodal ,scaler_mm, tfidf_mm
 
 nltk.download('punkt',     quiet=True)
 nltk.download('stopwords', quiet=True)
 nltk.download('punkt_tab', quiet=True)
+nltk.download('wordnet', quiet=True)
 
 app = FastAPI(title="EcoSmartX API")
 setup_cors(app)
@@ -33,23 +35,6 @@ df_train = pd.read_csv("./data/train.csv")
 df_test  = pd.read_csv("./data/test.csv")
 df_full  = pd.concat([df_train, df_test], ignore_index=True)
 df_pca = pd.read_csv("./data/pca_clusters.csv")
-
-STOP_DOMAINE = {
-    'lot', 'kg', 'litre', 'volume', 'poids', 'collecté', 'collectée',
-    'provenance', 'type', 'déchet', 'déchets', 'matériau', 'matériaux',
-    'usine', 'centre', 'tri', 'site', 'renseigné', 'non', 'identifié',
-    'rapport', 'collecte',
-}
-fr_stopwords = set(stopwords.words('french')).union(STOP_DOMAINE)
-stemmer      = FrenchStemmer()
-
-def preprocess_text(text: str) -> str:
-    text = text.lower()
-    text = re.sub(r'\d+[\.,]?\d*', '', text)
-    text = text.translate(str.maketrans('', '', string.punctuation + '«»—–'))
-    tokens = word_tokenize(text, language='french')
-    tokens = [stemmer.stem(t) for t in tokens if t not in fr_stopwords and len(t) > 2]
-    return ' '.join(tokens)
 
 def preprocess(lot: RecyclingLot):
     source_enc = enc_source.transform(pd.DataFrame([[lot.Source]], columns=["Source"]))[0][0]
@@ -66,6 +51,48 @@ CLUSTER_NAMES = {
     2: "Groupe Verre",
     3: "Groupe Minoritaire"
 }
+
+# ── Module 4 NLP preprocessing ──
+STOPWORDS_FR = set(stopwords.words('french'))
+STOPWORDS_DOMAINE = {
+    'collecte', 'rapport', 'materiau', 'matériau',
+    'dechet', 'déchet', 'lot', 'site', 'usine',
+    'provenance', 'source', 'type', 'objet',
+    'collecté', 'collectés', 'collectée',
+    'issu', 'issus', 'présente', 'présent',
+    'environ', 'estimation', 'estimé', 'estimée'
+}
+STOPWORDS_NLP  = STOPWORDS_FR | STOPWORDS_DOMAINE
+lemmatizer     = WordNetLemmatizer()
+
+def preprocess_text_nlp(texte: str) -> str:
+    if not isinstance(texte, str) or texte.strip() == '':
+        return ''
+    texte = texte.lower()
+    texte = re.sub(r'(\d+[\.,]?\d*)\s*(kg|g|cm|mm|m²|l|ml|%)', r'\1\2', texte)
+    texte = re.sub(r'[^\w\s]', ' ', texte)
+    tokens = word_tokenize(texte, language='french')
+    tokens = [t for t in tokens if t not in STOPWORDS_NLP and (len(t) > 2 or t.isdigit())]
+    tokens = [lemmatizer.lemmatize(t) for t in tokens]
+    return ' '.join(tokens)
+# ── Module 5 Multimodal preprocessing ──
+"""STOP_DOMAINE_MM = {
+    'lot', 'kg', 'litre', 'volume', 'poids', 'collecté', 'collectée',
+    'provenance', 'type', 'déchet', 'déchets', 'matériau', 'matériaux',
+    'usine', 'centre', 'tri', 'site', 'renseigné', 'non', 'identifié',
+    'rapport', 'collecte',
+}
+fr_stopwords_mm = set(stopwords.words('french')).union(STOP_DOMAINE_MM)
+stemmer         = FrenchStemmer()
+
+def preprocess_text_multimodal(text: str) -> str:
+    text = text.lower()
+    text = re.sub(r'\d+[\.,]?\d*', '', text)
+    text = text.translate(str.maketrans('', '', string.punctuation + '«»—–'))
+    tokens = word_tokenize(text, language='french')
+    tokens = [stemmer.stem(t) for t in tokens if t not in fr_stopwords_mm and len(t) > 2]
+    return ' '.join(tokens)
+"""
 
 # GET endpoints:
 @app.get("/")
@@ -247,7 +274,6 @@ def predict_full(lot: RecyclingLot):
 @app.post("/predict/cluster")
 def predict_cluster(lot: RecyclingLot):
     source_enc = enc_source.transform([[lot.Source]])[0][0]
-
     # Use same features as clustering training
     features = np.array([[
         lot.Poids,
@@ -266,49 +292,34 @@ def predict_cluster(lot: RecyclingLot):
         "pca_coords":    {"PC1": round(float(pca_coords[0]), 4),
                           "PC2": round(float(pca_coords[1]), 4)},
     }
-    
+# ── Module 4 : NLP prediction ──
 @app.post("/predict/nlp")
 def predict_nlp(input: TextInput):
     if not input.texte.strip():
         raise HTTPException(status_code=400, detail="Le texte ne peut pas être vide")
 
-    # Preprocess text same way as training
-    cleaned   = preprocess_text(input.texte)
+    cleaned    = preprocess_text_nlp(input.texte)   # ← Module 4 function
     vectorized = tfidf.transform([cleaned])
-    pred_enc  = nlp_clf.predict(vectorized)[0]
-    categorie = le.inverse_transform([pred_enc])[0]
-
-    return {
-        "texte_original": input.texte,
-        "texte_nettoye":  cleaned,
-        "categorie_predite": categorie
-    }
-    
-@app.post("/predict/multimodal")
-def predict_multimodal(input: MultimodalInput):
-    if not input.texte.strip():
-        raise HTTPException(status_code=400, detail="Le texte ne peut pas être vide")
-
-    # Preprocess text
-    cleaned = preprocess_text(input.texte)
-
-    # Build dataframe with same structure as training
-    source_enc = enc_source.transform([[input.Source]])[0][0]
-    df_input = pd.DataFrame([{
-        "Poids":        input.Poids,
-        "Volume":       input.Volume,
-        "Conductivite": input.Conductivite,
-        "Opacite":      input.Opacite,
-        "Rigidite":     input.Rigidite,
-        "Source_enc":   source_enc,
-        "text_clean":   cleaned
-    }])
-
-    pred_enc  = multimodal.predict(df_input)[0]
-    categorie = le.inverse_transform([pred_enc])[0]
+    pred_enc   = nlp_clf.predict(vectorized)[0]
+    categorie  = le.inverse_transform([pred_enc])[0]
 
     return {
         "texte_original":    input.texte,
-        "categorie_predite": categorie,
-        "mode":              "multimodal (texte + numérique)"
+        "texte_nettoye":     cleaned,
+        "categorie_predite": categorie
     }
+# ── Module 5 : Multimodal prediction ──
+"""@app.post("/predict/multimodal")
+def predict_multimodal(input: MultimodalInput):
+    if not input.texte.strip():
+        raise HTTPException(status_code=400, detail="Texte vide")
+
+    X = preprocess_multimodal(input)
+
+    # MUST match training pipeline (727 features)
+    pred = multimodal.predict(X)[0]
+
+    return {
+        "categorie_predite": le.inverse_transform([pred])[0],
+        "mode": "multimodal corrigé (TF-IDF + features numériques)"
+    }"""
