@@ -17,7 +17,7 @@ from schemas.recycling import RecyclingLot
 from schemas.nlp import TextInput
 from schemas.multimodal import MultimodalInput
 from middleware.cors import setup_cors
-from services.prediction_service import enc_source , le ,scaler, classifier , regressor, kmeans, pca, tfidf, nlp_clf, multimodal ,scaler_mm, tfidf_mm
+from services.prediction_service import enc_source , le ,scaler, classifier , regressor, kmeans, pca, tfidf, nlp_clf,nlp_model , multimodal ,scaler_mm, tfidf_mm
 
 nltk.download('punkt',     quiet=True)
 nltk.download('stopwords', quiet=True)
@@ -292,22 +292,26 @@ def predict_cluster(lot: RecyclingLot):
         "pca_coords":    {"PC1": round(float(pca_coords[0]), 4),
                           "PC2": round(float(pca_coords[1]), 4)},
     }
-# ── Module 4 : NLP prediction ──
 @app.post("/predict/nlp")
-def predict_nlp(input: TextInput):
-    if not input.texte.strip():
-        raise HTTPException(status_code=400, detail="Le texte ne peut pas être vide")
+def predict_nlp(data: TextInput):
+    try:
+        original_text = data.rapport_collecte
+        cleaned = preprocess_text_nlp(original_text)
 
-    cleaned    = preprocess_text_nlp(input.texte)   # ← Module 4 function
-    vectorized = tfidf.transform([cleaned])
-    pred_enc   = nlp_clf.predict(vectorized)[0]
-    categorie  = le.inverse_transform([pred_enc])[0]
+        if cleaned.strip() == "":
+            raise HTTPException(status_code=400, detail="Empty or invalid text provided")
 
-    return {
-        "texte_original":    input.texte,
-        "texte_nettoye":     cleaned,
-        "categorie_predite": categorie
-    }
+        categorie = nlp_model.predict([cleaned])[0]
+        return {
+            "texte_original": original_text,
+            "texte_nettoye": cleaned,
+            "categorie_predite": categorie
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"NLP prediction error: {str(e)}")
+
+
 # ── Module 5 : Multimodal prediction ──
 """@app.post("/predict/multimodal")
 def predict_multimodal(input: MultimodalInput):

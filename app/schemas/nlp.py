@@ -2,4 +2,4 @@ from pydantic import BaseModel
 
 
 class TextInput(BaseModel):
-    texte: str
+    rapport_collecte: str
