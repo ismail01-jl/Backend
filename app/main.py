@@ -15,7 +15,6 @@ from scipy.sparse import hstack
 
 from schemas.recycling import RecyclingLot
 from schemas.nlp import TextInput
-from schemas.multimodal import MultimodalInput
 from middleware.cors import setup_cors
 from services.prediction_service import enc_source , le ,scaler, classifier , regressor, kmeans, pca, tfidf, nlp_clf,nlp_model , multimodal ,scaler_mm, tfidf_mm
 
