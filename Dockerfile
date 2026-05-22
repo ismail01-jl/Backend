@@ -7,7 +7,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY requirements.txt .
 
 RUN pip install --no-cache-dir -r requirements.txt
-RUN python -m nltk.downloader punkt stopwords wordnet
+RUN python -c "import nltk; \
+    nltk.download('punkt'); \
+    nltk.download('stopwords'); \
+    nltk.download('wordnet'); \
+    nltk.download('punkt_tab')"
 COPY . .
 
 ENV PORT=8000

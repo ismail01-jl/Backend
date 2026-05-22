@@ -5,6 +5,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import re
+import os
 import string
 import nltk
 from nltk.tokenize import word_tokenize
@@ -18,12 +19,16 @@ from schemas.nlp import TextInput
 from middleware.cors import setup_cors
 from services.prediction_service import enc_source , le ,scaler, classifier , regressor, kmeans, pca, tfidf, nlp_clf,nlp_model , multimodal ,scaler_mm, tfidf_mm
 
-nltk.download('punkt',     quiet=True)
-nltk.download('stopwords', quiet=True)
-nltk.download('wordnet', quiet=True)
 
 app = FastAPI(title="EcoSmartX API")
 setup_cors(app)
+
+NLTK_DATA_PATH = "/tmp/nltk_data"
+os.makedirs(NLTK_DATA_PATH, exist_ok=True)
+nltk.data.path.append(NLTK_DATA_PATH)
+
+for resource in ['punkt', 'stopwords', 'wordnet', 'punkt_tab']:
+    nltk.download(resource, download_dir=NLTK_DATA_PATH, quiet=True)
 
 # ── Load data ──
 df_train = pd.read_csv("./data/train.csv")
