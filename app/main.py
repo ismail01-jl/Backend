@@ -21,14 +21,10 @@ from services.prediction_service import enc_source , le ,scaler, classifier , re
 
 nltk.download('punkt',     quiet=True)
 nltk.download('stopwords', quiet=True)
-nltk.download('punkt_tab', quiet=True)
 nltk.download('wordnet', quiet=True)
 
 app = FastAPI(title="EcoSmartX API")
 setup_cors(app)
-
-lots_db     = {}
-lot_counter = 1
 
 # ── Load data ──
 df_train = pd.read_csv("./data/train.csv")
@@ -75,24 +71,6 @@ def preprocess_text_nlp(texte: str) -> str:
     tokens = [t for t in tokens if t not in STOPWORDS_NLP and (len(t) > 2 or t.isdigit())]
     tokens = [lemmatizer.lemmatize(t) for t in tokens]
     return ' '.join(tokens)
-# ── Module 5 Multimodal preprocessing ──
-"""STOP_DOMAINE_MM = {
-    'lot', 'kg', 'litre', 'volume', 'poids', 'collecté', 'collectée',
-    'provenance', 'type', 'déchet', 'déchets', 'matériau', 'matériaux',
-    'usine', 'centre', 'tri', 'site', 'renseigné', 'non', 'identifié',
-    'rapport', 'collecte',
-}
-fr_stopwords_mm = set(stopwords.words('french')).union(STOP_DOMAINE_MM)
-stemmer         = FrenchStemmer()
-
-def preprocess_text_multimodal(text: str) -> str:
-    text = text.lower()
-    text = re.sub(r'\d+[\.,]?\d*', '', text)
-    text = text.translate(str.maketrans('', '', string.punctuation + '«»—–'))
-    tokens = word_tokenize(text, language='french')
-    tokens = [stemmer.stem(t) for t in tokens if t not in fr_stopwords_mm and len(t) > 2]
-    return ' '.join(tokens)
-"""
 
 # GET endpoints:
 @app.get("/")
@@ -174,47 +152,6 @@ def get_stats_by_category(categorie: str):
         "sources":     subset["Source"].value_counts().to_dict()
     }
 
-@app.get("/lots")
-def get_all_lots():
-    if not lots_db:
-        raise HTTPException(status_code=404, detail="No lots found")
-    return {"total": len(lots_db), "lots": lots_db}
-
-@app.get("/stats/categories/count")
-def categories_count():
-
-    counts = df_full["Categorie"].value_counts()
-
-    return {
-        "labels": counts.index.tolist(),
-        "values": counts.values.tolist()
-    }
-
-@app.get("/stats/categories/prixmoyen")
-def avg_price_by_category():
-
-    stats = (
-        df_full
-        .groupby("Categorie")["Prix_Revente"]
-        .mean()
-        .round(2)
-    )
-
-    return {
-        "labels": stats.index.tolist(),
-        "values": stats.values.tolist()
-    }
-
-@app.get("/stats/sources/count")
-def sources_count():
-
-    counts = df_full["Source"].value_counts()
-
-    return {
-        "labels": counts.index.tolist(),
-        "values": counts.values.tolist()
-    }
-    
 # ── Module 3 : Clustering GET ──
 @app.get("/clustering/stats")
 def get_clustering_stats():
@@ -238,12 +175,6 @@ def get_pca_data():
     return {
         "points": sample[["PC1", "PC2", "Cluster", "Categorie"]].to_dict(orient="records")
     }
-
-@app.get("/lot/{lot_id}")
-def get_lot(lot_id: int):
-    if lot_id not in lots_db:
-        raise HTTPException(status_code=404, detail=f"Lot {lot_id} not found")
-    return {"lot_id": lot_id, "data": lots_db[lot_id]}
 
 # POST endpoints:
 
@@ -310,20 +241,3 @@ def predict_nlp(data: TextInput):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"NLP prediction error: {str(e)}")
-
-
-# ── Module 5 : Multimodal prediction ──
-"""@app.post("/predict/multimodal")
-def predict_multimodal(input: MultimodalInput):
-    if not input.texte.strip():
-        raise HTTPException(status_code=400, detail="Texte vide")
-
-    X = preprocess_multimodal(input)
-
-    # MUST match training pipeline (727 features)
-    pred = multimodal.predict(X)[0]
-
-    return {
-        "categorie_predite": le.inverse_transform([pred])[0],
-        "mode": "multimodal corrigé (TF-IDF + features numériques)"
-    }"""
