@@ -232,10 +232,14 @@ def predict_nlp(data: TextInput):
             raise HTTPException(status_code=400, detail="Empty or invalid text provided")
 
         categorie = nlp_model.predict([cleaned])[0]
+        # 🔑 Conversion NumPy → Python natif
+        if isinstance(categorie, np.generic):
+            categorie = categorie.item()
+
         return {
             "texte_original": original_text,
             "texte_nettoye": cleaned,
-            "categorie_predite": categorie
+            "categorie_predite": str(categorie)
         }
 
     except Exception as e:
