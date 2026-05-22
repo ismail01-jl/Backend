@@ -47,9 +47,9 @@ FEATURES     = ["Poids", "Volume", "Conductivite", "Opacite", "Rigidite", "Sourc
 LABEL_NAMES  = ['Métal', 'Papier', 'Plastique', 'Verre']
 CLUSTER_NAMES = {
     0: "Groupe Métal",
-    1: "Groupe Mixte",
-    2: "Groupe Verre",
-    3: "Groupe Minoritaire"
+    1: "Groupe Papier",
+    2: "Groupe Plastique",
+    3: "Groupe Verre"
 }
 
 # ── Module 4 NLP preprocessing ──
